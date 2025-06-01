@@ -1,0 +1,13 @@
+{
+  "name": "kuka-robot-simulator",
+  "main": "index.ts",
+  "scripts": {
+    "start": "bun run index.ts"
+  },
+  "devDependencies": {
+    "@types/node": "latest",
+    "typescript": "latest",
+    "ts-node": "latest"
+  },
+  "packageManager": "bun@1.2.15"
+}

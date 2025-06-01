@@ -1,0 +1,18 @@
+:Base RoboWorks.hlp
+:Title RoboWorks Help
+1 About RoboWorks
+2 What is RoboWorks=what_is_roboWorks
+2 Where to get Support=where_to_get_support
+2 Get Access to RoboWorks Samples=roboworks_samples
+1 How To
+2 Start Using RoboWorks=howto_start
+2 Create a simple model=howto_createmodel
+2 Animate a Model from a data file=howto_animatefromfile
+2 Animate a Model from another program=howto_animatefromIP
+1 Menus
+2 File menu=menu_file
+2 Edit menu=menu_edit
+2 View menu=menu_view
+2 Animation menu=menu_animation
+2 Window menu=menu_window
+2 Help menu=menu_help
