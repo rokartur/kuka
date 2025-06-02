@@ -82,4 +82,3 @@ In the example above, the `Body` and `Arm` will move simultaneously.
 5.  Open the `Kuka.dat` file in RoboWorks software to visualize the robot's movements.
 
 The `Kuka.dat` file contains a series of lines, where each line represents the state of the angles of all six robot parts at a given time step. The first line contains the part labels.
-```
