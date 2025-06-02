@@ -184,6 +184,9 @@ class Kuka {
     }
 }
 
+// If you use this code please leave a ⭐ on GitHub:
+// https://github.com/rokartur/kuka
+
 function main(): void {
     const kuka = new Kuka();
 
