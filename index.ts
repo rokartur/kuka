@@ -9,12 +9,18 @@ enum PartID {
     BlackDisk
 }
 
+const DEFAULT_STEP_DELAY_MS: number = 25;
+const TARGET_FPS: number = 60;
+const INTERPOLATION_FACTOR: number = TARGET_FPS / (1000 / DEFAULT_STEP_DELAY_MS);
+
 function calculateStepsForDuration(durationSeconds: number): number {
-    return Math.floor(durationSeconds * 60);
+    const totalTimeMs = durationSeconds * 1000;
+    const baseSteps = Math.floor(totalTimeMs / DEFAULT_STEP_DELAY_MS);
+    return Math.floor(baseSteps * INTERPOLATION_FACTOR);
 }
 
-const STEPS = calculateStepsForDuration(1.25)
-const ACCELERATION = 5.0;
+const STEPS = calculateStepsForDuration(1);
+const ACCELERATION: number = 1;
 
 class Part {
     public id: number;
