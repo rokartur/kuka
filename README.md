@@ -8,63 +8,65 @@ The project simulates the movements of a Kuka robot arm, generating a data file 
 
 ## How it Works
 
-The main class is [`Kuka`](index.ts), which manages the individual parts of the robot. Each robot part is represented by the [`Part`](index.ts) class.
+The simulator uses functional programming approach with TypeScript. Each robot part is represented by the [`Part`](index.ts) interface.
 
 ### Basic Robot Parts:
 
 Defined in the [`PartID`](index.ts) enum:
-*   `Base`
-*   `Body`
-*   `Arm`
-*   `Wrist`
-*   `Tool`
-*   `BlackDisk`
+*   `Base` (0)
+*   `Body` (1)
+*   `Arm` (2)
+*   `Wrist` (3)
+*   `Tool` (4)
+*   `BlackDisk` (5)
 
 ### Movement Control
 
-Movements are defined by an angle (`theta`), acceleration (`acceleration`), and the number of steps (`steps`). The number of steps is calculated based on the movement duration using the [`calculateStepsForDuration(durationSeconds)`](index.ts) function. The default number of steps (`STEPS`) and acceleration (`ACCELERATION`) are defined globally.
+Movements are defined by an angle (`theta`) and the number of steps (`steps`). The simulator uses an easing function (`easeInOutCubic`) to create smooth animations. The default number of steps (`STEPS`) is calculated automatically based on the target execution duration.
 
-### `Kuka` Class Methods
+### Configuration Constants
 
-*   **`constructor()`**: Initializes the robot, creates instances of the parts, and prepares the `Kuka.dat` file for writing by adding the part labels at the beginning.
-*   **`movePart(id: PartID, theta: number, acceleration: number, steps: number)`**: Moves a single robot part.
-    *   `id`: Part identifier from [`PartID`](index.ts).
-    *   `theta`: Angle of rotation (in degrees).
-    *   `acceleration`: Acceleration factor (affects the movement curve).
-    *   `steps`: Number of steps to perform the movement.
-*   **Helper methods for `movePart`**:
-    *   [`moveBase(theta, acceleration, steps)`](index.ts)
-    *   [`moveBody(theta, acceleration, steps)`](index.ts)
-    *   [`moveArm(theta, acceleration, steps)`](index.ts)
-    *   [`moveWrist(theta, acceleration, steps)`](index.ts)
-    *   [`moveTool(theta, acceleration, steps)`](index.ts)
-    *   [`moveDisk(theta, acceleration, steps)`](index.ts)
-*   **`close()`**: Closes the write stream to the `Kuka.dat` file. **This must always be called at the end of operations.**
+*   `DEFAULT_STEP_DELAY_MS = 25`: Default delay between steps in milliseconds
+*   `TARGET_FPS = 60`: Target frames per second
+*   `TARGET_EXECUTION_DURATION_SECONDS = 6`: Target duration for each movement sequence
+*   `STEPS`: Automatically calculated number of steps for smooth animation
 
-### New Methods (compared to the original repository)
+### Core Functions
 
-*   **`moveMultipleParts(commands: MoveCommand[])`**: Allows for the simultaneous movement of multiple robot parts. This is a key new feature.
+*   **`initializeKuka()`**: Initializes the robot, creates instances of the parts, and prepares the `Kuka.dat` file for writing by adding the part labels at the beginning.
+
+*   **`movePartByID(id: number, theta: number, steps: number)`**: Moves a single robot part.
+    *   `id`: Part identifier from [`PartID`](index.ts)
+    *   `theta`: Angle of rotation (in degrees)
+    *   `steps`: Number of steps to perform the movement
+
+*   **`moveMultipleParts(commands: MoveCommand[])`**: Allows for the simultaneous movement of multiple robot parts.
     *   `commands`: An array of `MoveCommand` objects. Each `MoveCommand` object has the following structure:
         ```typescript
         interface MoveCommand {
             partId: PartID;
             theta: number;
-            acceleration: number;
             steps: number;
         }
         ```
     *   The method synchronizes the movements so that all finish at the same time, based on the longest movement (largest number of steps) among all commands. Parts whose movement is shorter will maintain their final position until the longest movement is completed.
 
-Example of using `moveMultipleParts`:
+*   **`movePart(part: Part, theta: number, steps: number): number[]`**: Internal function that calculates smooth movement trajectory using easing.
+
+*   **`easeInOutCubic(t: number): number`**: Easing function for smooth animation transitions.
+
+### Example Usage
+
 ```typescript
-// ...existing code...
-kuka.moveMultipleParts([
-    { partId: PartID.Body, theta: 90.0, acceleration: ACCELERATION, steps: STEPS },
-    { partId: PartID.Arm, theta: -90.0, acceleration: ACCELERATION, steps: STEPS }
+// Move single part
+movePartByID(PartID.Base, 60, STEPS);
+
+// Move multiple parts simultaneously  
+moveMultipleParts([
+    { partId: PartID.Body, theta: 90.0, steps: STEPS },
+    { partId: PartID.Arm, theta: -90.0, steps: STEPS }
 ]);
-// ...existing code...
 ```
-In the example above, the `Body` and `Arm` will move simultaneously.
 
 ## How to Use
 
@@ -81,4 +83,15 @@ In the example above, the `Body` and `Arm` will move simultaneously.
     This will generate a `Kuka.dat` file in the project's root directory.
 5.  Open the `Kuka.dat` file in RoboWorks software to visualize the robot's movements.
 
-The `Kuka.dat` file contains a series of lines, where each line represents the state of the angles of all six robot parts at a given time step. The first line contains the part labels.
+## Output Format
+
+The `Kuka.dat` file contains a series of lines, where each line represents the state of the angles of all six robot parts at a given time step. The first line contains the part labels (`KukaTheta-1` through `KukaTheta-6`), and subsequent lines contain the angle values formatted to 2 decimal places.
+
+## Key Differences from Original
+
+*   Rewritten in TypeScript with type safety
+*   Functional programming approach instead of class-based
+*   Automatic step calculation based on target duration
+*   Built-in easing functions for smooth animations
+*   Simplified API with fewer parameters (no manual acceleration parameter)
+*   Enhanced `moveMultipleParts` function for complex coordinated movements

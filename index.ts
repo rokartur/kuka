@@ -1,220 +1,102 @@
 import * as fs from 'fs';
 
-enum PartID {
-    Base = 0,
-    Body,
-    Arm,
-    Wrist,
-    Tool,
-    BlackDisk
-}
+enum PartID { Base = 0, Body, Arm, Wrist, Tool, BlackDisk }
 
-const DEFAULT_STEP_DELAY_MS: number = 25;
-const TARGET_FPS: number = 60;
-const INTERPOLATION_FACTOR: number = TARGET_FPS / (1000 / DEFAULT_STEP_DELAY_MS);
+interface Part { id: number; name: string; theta: number; }
+interface MoveCommand { partId: PartID; theta: number; steps: number; }
 
-function calculateStepsForDuration(durationSeconds: number): number {
-    const totalTimeMs = durationSeconds * 1000;
-    const baseSteps = Math.floor(totalTimeMs / DEFAULT_STEP_DELAY_MS);
-    return Math.floor(baseSteps * INTERPOLATION_FACTOR);
-}
+const DEFAULT_STEP_DELAY_MS = 25, TARGET_FPS = 60, TARGET_EXECUTION_DURATION_SECONDS = 6;
+const INTERPOLATION_FACTOR = TARGET_FPS / (1000 / DEFAULT_STEP_DELAY_MS);
+const TARGET_STEPS_FOR_EXECUTION = Math.round((TARGET_EXECUTION_DURATION_SECONDS * 1000) / DEFAULT_STEP_DELAY_MS);
+const baseStepsFromInput = Math.ceil(TARGET_STEPS_FOR_EXECUTION / INTERPOLATION_FACTOR);
+const durationInputForCalcSteps = (baseStepsFromInput * DEFAULT_STEP_DELAY_MS) / 1000;
 
-const STEPS = calculateStepsForDuration(1);
-const ACCELERATION: number = 1;
+const calculateStepsForDuration = (durationInput: number): number => Math.floor((Math.floor(durationInput * 1000 / DEFAULT_STEP_DELAY_MS) * INTERPOLATION_FACTOR));
+const easeInOutCubic = (t: number): number => t < 0.5 ? 4 * t * t * t : 1 - Math.pow(-2 * t + 2, 3) / 2;
+const STEPS = calculateStepsForDuration(durationInputForCalcSteps);
 
-class Part {
-    public id: number;
-    public name: string;
-    public theta: number;
+let parts: Part[] = [];
+let file: fs.WriteStream;
 
-    constructor(id: number, name: string) {
-        this.id = id;
-        this.name = name;
-        this.theta = 0;
+const createPart = (id: number, name: string): Part => ({ id, name, theta: 0 });
+
+const movePart = (part: Part, theta: number, steps: number): number[] => {
+    if (steps < 0) steps = 0;
+    const moves: number[] = [], start = part.theta, end = start + theta;
+    for (let i = 1; i <= steps; i++) {
+        const normalizedTime = i / steps, easedFactor = easeInOutCubic(normalizedTime);
+        moves.push(start + (end - start) * easedFactor);
     }
+    part.theta = end;
+    return moves;
+};
 
-    move(theta: number, acceleration: number, steps: number): number[] {
-        if (steps < 0) {
-            steps = 0;
+const getPartsLabel = (): string => parts.map(part => part.name).join(' ') + ' ';
+
+const initializeKuka = (): void => {
+    parts = [
+        createPart(PartID.Base, "KukaTheta-1"), createPart(PartID.Body, "KukaTheta-2"),
+        createPart(PartID.Arm, "KukaTheta-3"), createPart(PartID.Wrist, "KukaTheta-4"),
+        createPart(PartID.Tool, "KukaTheta-5"), createPart(PartID.BlackDisk, "KukaTheta-6")
+    ];
+    file = fs.createWriteStream("Kuka.dat");
+    file.write(getPartsLabel() + '\n');
+};
+
+const movePartByID = (id: number, theta: number, steps: number): void => {
+    const moves = movePart(parts[id], theta, steps);
+    const thetas = parts.map(part => part.theta);
+    moves.forEach(move => {
+        thetas[id] = move;
+        file.write(thetas.map(t => t.toFixed(2)).join(' ') + ' \n');
+    });
+};
+
+const moveMultipleParts = (commands: MoveCommand[]): void => {
+    if (commands.length === 0) return;
+    const maxSteps = Math.max(...commands.map(cmd => cmd.steps));
+    const allMoves: number[][] = Array(parts.length).fill(null).map(() => []);
+
+    commands.forEach(command => {
+        const moves = movePart(parts[command.partId], command.theta, command.steps);
+        allMoves[command.partId] = moves;
+        while (allMoves[command.partId].length < maxSteps) {
+            allMoves[command.partId].push(moves[moves.length - 1]);
         }
+    });
 
-        const moves: number[] = [];
-        const start = this.theta;
-        const end = start + theta;
-        const acc = Math.abs(acceleration);
-
-        for (let i = 1; i <= steps; i++) {
-            const normalizedTime = i / steps;
-            const t = normalizedTime;
-
-            // Smooth transition without acceleration at the start and end.
-            // const smoothFactor = t * t * t * (t * (t * 6 - 15) + 10);
-            
-            // To maintain zero acceleration at the beginning and end, 'acc' should be > 2/3.
-            // For acc = 1, smoothFactor equals quinticFactor.
-            // For acc > 1, the smoothing effect (slower start/end, faster middle) is enhanced.
-            let quinticFactor = t * t * t * (t * (t * 6 - 15) + 10);
-            const smoothFactor = Math.pow(quinticFactor, acc);
-
-            const newTheta = start + (end - start) * smoothFactor;
-
-            moves.push(newTheta);
-        }
-
-        this.theta = end;
-        return moves;
-    }
-}
-
-class Parts extends Array<Part> {
-    label(): string {
-        let result = '';
-        for (const part of this) {
-            result += `${part.name} `;
-        }
-        return result;
-    }
-}
-
-interface MoveCommand {
-    partId: PartID;
-    theta: number;
-    acceleration: number;
-    steps: number;
-}
-
-class Kuka {
-    private parts: Parts;
-    private file: fs.WriteStream;
-
-    constructor() {
-        this.parts = new Parts();
-        this.parts.push(
-            new Part(PartID.Base, "KukaTheta-1"),
-            new Part(PartID.Body, "KukaTheta-2"),
-            new Part(PartID.Arm, "KukaTheta-3"),
-            new Part(PartID.Wrist, "KukaTheta-4"),
-            new Part(PartID.Tool, "KukaTheta-5"),
-            new Part(PartID.BlackDisk, "KukaTheta-6")
-        );
-
-        this.file = fs.createWriteStream("Kuka.dat");
-        this.writeLabel();
-    }
-
-    private writeLabel(): void {
-        const label = this.parts.label();
-        this.file.write(label + '\n');
-    }
-
-    movePart(id: number, theta: number, acceleration: number, steps: number): void {
-        const moves = this.parts[id].move(theta, acceleration, steps);
-        const thetas: number[] = this.parts.map(part => part.theta);
-
-        for (const move of moves) {
-            thetas[id] = move;
-
-            let line = '';
-            for (const theta of thetas) {
-                line += `${theta.toFixed(2)} `;
-            }
-            line += '\n';
-
-            this.file.write(line);
+    for (let i = 0; i < parts.length; i++) {
+        if (allMoves[i].length === 0) {
+            allMoves[i] = Array(maxSteps).fill(parts[i].theta);
         }
     }
 
-    moveMultipleParts(commands: MoveCommand[]): void {
-        if (commands.length === 0) return;
-
-        const maxSteps = Math.max(...commands.map(cmd => cmd.steps));
-
-        const allMoves: number[][] = [];
-        for (let i = 0; i < this.parts.length; i++) {
-            allMoves[i] = [];
-        }
-
-        for (const command of commands) {
-            const moves = this.parts[command.partId].move(command.theta, command.acceleration, command.steps);
-            allMoves[command.partId] = moves;
-            
-            while (allMoves[command.partId].length < maxSteps) {
-                allMoves[command.partId].push(moves[moves.length - 1]);
-            }
-        }
-
-        for (let i = 0; i < this.parts.length; i++) {
-            if (allMoves[i].length === 0) {
-                for (let j = 0; j < maxSteps; j++) {
-                    allMoves[i].push(this.parts[i].theta);
-                }
-            }
-        }
-
-        for (let step = 0; step < maxSteps; step++) {
-            let line = '';
-            for (let partId = 0; partId < this.parts.length; partId++) {
-                line += `${allMoves[partId][step].toFixed(2)} `;
-            }
-            line += '\n';
-            this.file.write(line);
-        }
+    for (let step = 0; step < maxSteps; step++) {
+        file.write(allMoves.map(moves => moves[step].toFixed(2)).join(' ') + ' \n');
     }
+};
 
-    moveBase(theta: number, acceleration: number, steps: number): void {
-        this.movePart(PartID.Base, theta, acceleration, steps);
-    }
-
-    moveBody(theta: number, acceleration: number, steps: number): void {
-        this.movePart(PartID.Body, theta, acceleration, steps);
-    }
-
-    moveArm(theta: number, acceleration: number, steps: number): void {
-        this.movePart(PartID.Arm, theta, acceleration, steps);
-    }
-
-    moveWrist(theta: number, acceleration: number, steps: number): void {
-        this.movePart(PartID.Wrist, theta, acceleration, steps);
-    }
-
-    moveTool(theta: number, acceleration: number, steps: number): void {
-        this.movePart(PartID.Tool, theta, acceleration, steps);
-    }
-
-    moveDisk(theta: number, acceleration: number, steps: number): void {
-        this.movePart(PartID.BlackDisk, theta, acceleration, steps);
-    }
-
-    close(): void {
-        this.file.end();
-    }
-}
-
-// If you use this code please leave a ⭐ on GitHub:
-// https://github.com/rokartur/kuka
-
-function main(): void {
-    const kuka = new Kuka();
-
+const main = (): void => {
+    initializeKuka();
     try {
-        kuka.moveBase(60.0, ACCELERATION, STEPS);
-        kuka.moveMultipleParts([
-            { partId: PartID.Body, theta: 90.0, acceleration: ACCELERATION, steps: STEPS },
-            { partId: PartID.Arm, theta: -90.0, acceleration: ACCELERATION, steps: STEPS }
+        movePartByID(PartID.Base, 60, STEPS);
+        moveMultipleParts([
+            { partId: PartID.Body, theta: 90.0, steps: STEPS },
+            { partId: PartID.Arm, theta: -90.0, steps: STEPS }
         ]);
-        kuka.moveMultipleParts([
-            { partId: PartID.Body, theta: -45.0, acceleration: ACCELERATION, steps: STEPS },
-            { partId: PartID.Arm, theta: 90.0, acceleration: ACCELERATION, steps: STEPS },
-            { partId: PartID.Tool, theta: -45.0, acceleration: ACCELERATION, steps: STEPS  },
+        moveMultipleParts([
+            { partId: PartID.Body, theta: -45.0, steps: STEPS },
+            { partId: PartID.Arm, theta: 90.0, steps: STEPS },
+            { partId: PartID.Tool, theta: -45.0, steps: STEPS },
         ]);
-        kuka.moveMultipleParts([
-            { partId: PartID.Body, theta: -45.0, acceleration: ACCELERATION, steps: STEPS },
-            { partId: PartID.Tool, theta: 45.0, acceleration: ACCELERATION, steps: STEPS },
+        moveMultipleParts([
+            { partId: PartID.Body, theta: -45.0, steps: STEPS },
+            { partId: PartID.Tool, theta: 45.0, steps: STEPS },
         ]);
-        kuka.moveBase(-60.0, ACCELERATION, STEPS);
+        movePartByID(PartID.Base, -60, STEPS);
     } finally {
-        kuka.close();
+        file.end();
     }
-}
+};
 
 main();
