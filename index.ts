@@ -20,17 +20,6 @@ let file: fs.WriteStream;
 
 const createPart = (id: number, name: string): Part => ({ id, name, theta: 0 });
 
-const movePart = (part: Part, theta: number, steps: number): number[] => {
-    if (steps < 0) steps = 0;
-    const moves: number[] = [], start = part.theta, end = start + theta;
-    for (let i = 1; i <= steps; i++) {
-        const normalizedTime = i / steps, easedFactor = easeInOutCubic(normalizedTime);
-        moves.push(start + (end - start) * easedFactor);
-    }
-    part.theta = end;
-    return moves;
-};
-
 const getPartsLabel = (): string => parts.map(part => part.name).join(' ') + ' ';
 
 const initializeKuka = (): void => {
@@ -41,6 +30,17 @@ const initializeKuka = (): void => {
     ];
     file = fs.createWriteStream("Kuka.dat");
     file.write(getPartsLabel() + '\n');
+};
+
+const movePart = (part: Part, theta: number, steps: number): number[] => {
+    if (steps < 0) steps = 0;
+    const moves: number[] = [], start = part.theta, end = start + theta;
+    for (let i = 1; i <= steps; i++) {
+        const normalizedTime = i / steps, easedFactor = easeInOutCubic(normalizedTime);
+        moves.push(start + (end - start) * easedFactor);
+    }
+    part.theta = end;
+    return moves;
 };
 
 const movePartByID = (id: number, theta: number, steps: number): void => {
